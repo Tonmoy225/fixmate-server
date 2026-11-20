@@ -3,6 +3,8 @@ const express = require("express");
 const cors = require("cors");
 const { connectDB } = require("./db");
 
+const servicesRoutes = require("./routes/services");
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -22,6 +24,8 @@ app.get("/api/test", verifyToken, (req, res) => {
 app.get("/", (req, res) => {
   res.send("FixMate server is running");
 });
+app.use("/api/services", servicesRoutes);
+
 
 connectDB()
   .then(() => {
