@@ -13,6 +13,11 @@ app.use(
   })
 );
 app.use(express.json());
+const { verifyToken } = require("./middleware/auth");
+
+app.get("/api/test", verifyToken, (req, res) => {
+  res.send({ message: "Token OK", email: req.decoded.email });
+});
 
 app.get("/", (req, res) => {
   res.send("FixMate server is running");
