@@ -51,24 +51,36 @@ router.get("/", async (req, res) => {
 });
 
 // GET /api/services/:id
+// GET /api/services/:id
 router.get("/:id", async (req, res) => {
-  const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-  if (!ObjectId.isValid(id)) {
-    return res.status(404).send({ message: "Service not found" });
+    if (!ObjectId.isValid(id)) {
+      return res.status(404).send({ message: "Service not found" });
+    }
+
+    const service = await collections.services.findOne({
+      _id: new ObjectId(id),
+      approvalStatus: "approved",
+      isAvailable: true,
+    });
+
+    if (!service) {
+      return res.status(404).send({ message: "Service not found" });
+    }
+
+    // technician-এর নাম, ছবি, area আর bio (email পাঠাচ্ছি না)
+    const technician = await collections.users.findOne(
+      { email: service.technicianEmail },
+      { projection: { name: 1, image: 1, area: 1, bio: 1 } }
+    );
+
+    res.send({ ...service, technician });
+  } catch (error) {
+    console.error("GET /api/services/:id error:", error.message);
+    res.status(500).send({ message: "Failed to load service" });
   }
-
-  const service = await collections.services.findOne({
-    _id: new ObjectId(id),
-    approvalStatus: "approved",
-    isAvailable: true,
-  });
-
-  if (!service) {
-    return res.status(404).send({ message: "Service not found" });
-  }
-
-  res.send(service);
 });
 
 module.exports = router;
