@@ -10,9 +10,15 @@ const port = process.env.PORT || 5000;
 
 const bookingsRoutes = require("./routes/bookings");
 
+// CLIENT_URL না থাকলে localhost ডিফল্ট; একাধিক origin কমা দিয়ে দেওয়া যাবে
+const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:3000")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: [process.env.CLIENT_URL],
+    origin: allowedOrigins,
     credentials: true,
   })
 );
