@@ -8,6 +8,8 @@ const servicesRoutes = require("./routes/services");
 const app = express();
 const port = process.env.PORT || 5000;
 
+const bookingsRoutes = require("./routes/bookings");
+
 app.use(
   cors({
     origin: [process.env.CLIENT_URL],
@@ -26,6 +28,7 @@ app.get("/", (req, res) => {
 });
 app.use("/api/services", servicesRoutes);
 
+app.use("/api/bookings", bookingsRoutes);
 
 connectDB()
   .then(() => {
