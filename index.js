@@ -2,47 +2,38 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { connectDB } = require("./db");
-
 const servicesRoutes = require("./routes/services");
-
+const bookingsRoutes = require("./routes/bookings");
 const adminRoutes = require("./routes/admin");
-
 const paymentsRoutes = require("./routes/payments");
+const webhookHandler = require("./routes/webhook");
 
 const app = express();
 const port = process.env.PORT || 5000;
 
-const bookingsRoutes = require("./routes/bookings");
-
-// CLIENT_URL না থাকলে localhost ডিফল্ট; একাধিক origin কমা দিয়ে দেওয়া যাবে
-const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:3000")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: [process.env.CLIENT_URL],
     credentials: true,
   })
 );
-app.use(express.json());
-const { verifyToken } = require("./middleware/auth");
 
-app.get("/api/test", verifyToken, (req, res) => {
-  res.send({ message: "Token OK", email: req.decoded.email });
-});
+// webhook আগে, raw body সহ (express.json এর আগে হতেই হবে)
+app.post(
+  "/api/payments/webhook",
+  express.raw({ type: "application/json" }),
+  webhookHandler
+);
+
+app.use(express.json());
 
 app.get("/", (req, res) => {
   res.send("FixMate server is running");
 });
+
 app.use("/api/services", servicesRoutes);
-
 app.use("/api/bookings", bookingsRoutes);
-
 app.use("/api/admin", adminRoutes);
-
-
 app.use("/api/payments", paymentsRoutes);
 
 connectDB()

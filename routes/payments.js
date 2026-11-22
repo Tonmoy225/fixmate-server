@@ -4,6 +4,8 @@ const { collections } = require("../db");
 const stripe = require("../lib/stripe");
 const { verifyToken, verifyCustomer } = require("../middleware/auth");
 
+const savePayment = require("../lib/savePayment");
+
 const router = express.Router();
 
 // POST /api/payments/create-checkout-session  (শুধু customer)
@@ -81,5 +83,41 @@ router.post(
     }
   }
 );
+
+
+// GET /api/payments/verify?session_id=...  (success page এটা ডাকে)
+router.get("/verify", verifyToken, verifyCustomer, async (req, res) => {
+  try {
+    const { session_id } = req.query;
+    if (!session_id) {
+      return res.status(400).send({ message: "Session id is required" });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(session_id);
+
+    // অন্য customer-এর session দিয়ে verify করা যাবে না
+    if (session.metadata?.customerEmail !== req.user.email) {
+      return res.status(403).send({ message: "Forbidden access" });
+    }
+
+    if (session.payment_status !== "paid") {
+      return res.status(400).send({ message: "Payment is not completed" });
+    }
+
+    const payment = await savePayment(session);
+    if (!payment) {
+      return res.status(404).send({ message: "Booking not found" });
+    }
+
+    res.send({
+      serviceTitle: payment.serviceTitle,
+      amount: payment.amount,
+      transactionId: payment.transactionId,
+    });
+  } catch (error) {
+    console.error("Verify payment error:", error.message);
+    res.status(500).send({ message: "Failed to verify payment" });
+  }
+});
 
 module.exports = router;

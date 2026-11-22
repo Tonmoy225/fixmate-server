@@ -20,6 +20,8 @@ async function connectDB() {
     { stripeSessionId: 1 },
     { unique: true }
   );
+  // একটা booking-এর সর্বোচ্চ একটাই payment
+  await collections.payments.createIndex({ bookingId: 1 }, { unique: true });
 
   console.log("MongoDB connected");
 }
