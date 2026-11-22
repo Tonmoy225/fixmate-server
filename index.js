@@ -8,6 +8,8 @@ const adminRoutes = require("./routes/admin");
 const paymentsRoutes = require("./routes/payments");
 const webhookHandler = require("./routes/webhook");
 
+const usersRoutes = require("./routes/users");
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -35,6 +37,7 @@ app.use("/api/services", servicesRoutes);
 app.use("/api/bookings", bookingsRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/payments", paymentsRoutes);
+app.use("/api/users", usersRoutes);
 
 connectDB()
   .then(() => {
