@@ -1,9 +1,20 @@
 const express = require("express");
 const { ObjectId } = require("mongodb");
 const { collections } = require("../db");
-const { verifyToken, verifyCustomer } = require("../middleware/auth");
+const {
+  verifyToken,
+  verifyCustomer,
+  verifyTechnician,
+} = require("../middleware/auth");
 
 const router = express.Router();
+
+// কোন status থেকে কোন status-এ যাওয়া যাবে (technician-এর জন্য)
+const technicianTransitions = {
+  requested: ["accepted", "rejected"],
+  accepted: ["in-progress"],
+  "in-progress": ["completed"],
+};
 
 // POST /api/bookings  (শুধু customer)
 router.post("/", verifyToken, verifyCustomer, async (req, res) => {
@@ -11,7 +22,6 @@ router.post("/", verifyToken, verifyCustomer, async (req, res) => {
     const { serviceId, phone, address, preferredDate, problemDescription } =
       req.body;
 
-    // ১. ফিল্ড যাচাই
     if (!ObjectId.isValid(serviceId)) {
       return res.status(400).send({ message: "Invalid service" });
     }
@@ -27,8 +37,6 @@ router.post("/", verifyToken, verifyCustomer, async (req, res) => {
         .send({ message: "Problem description must be at least 20 characters" });
     }
 
-    // ২. তারিখ আজকের বা ভবিষ্যতের হতে হবে
-    // (timezone-এর ফারাকের জন্য এক দিনের ছাড় রাখা হয়েছে, client-এ আজকের তারিখ থেকেই বাছাই করা যায়)
     const date = new Date(preferredDate);
     const limit = new Date();
     limit.setUTCDate(limit.getUTCDate() - 1);
@@ -39,7 +47,6 @@ router.post("/", verifyToken, verifyCustomer, async (req, res) => {
         .send({ message: "Preferred date must be today or a future date" });
     }
 
-    // ৩. service থাকতে হবে এবং approved + available হতে হবে
     const service = await collections.services.findOne({
       _id: new ObjectId(serviceId),
       approvalStatus: "approved",
@@ -49,14 +56,12 @@ router.post("/", verifyToken, verifyCustomer, async (req, res) => {
       return res.status(404).send({ message: "Service not found" });
     }
 
-    // ৪. নিজের service-এ request করা যাবে না
     if (service.technicianEmail === req.user.email) {
       return res
         .status(403)
         .send({ message: "You cannot request your own service" });
     }
 
-    // ৫. একই service-এ আগের কোনো active request থাকলে আটকাও
     const activeBooking = await collections.bookings.findOne({
       serviceId: String(service._id),
       customerEmail: req.user.email,
@@ -68,7 +73,6 @@ router.post("/", verifyToken, verifyCustomer, async (req, res) => {
         .send({ message: "You already have an active request for this service" });
     }
 
-    // ৬. booking তৈরি (service আর technician-এর তথ্য কপি করে)
     const now = new Date();
     const booking = {
       serviceId: String(service._id),
@@ -96,6 +100,112 @@ router.post("/", verifyToken, verifyCustomer, async (req, res) => {
   } catch (error) {
     console.error("POST /api/bookings error:", error.message);
     res.status(500).send({ message: "Failed to create booking" });
+  }
+});
+
+// PATCH /api/bookings/:id/status  (শুধু job-এর মালিক technician)
+router.patch("/:id/status", verifyToken, verifyTechnician, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, finalAmount } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(404).send({ message: "Booking not found" });
+    }
+
+    // _id আর technicianEmail দুটোই মেলাচ্ছি, তাই অন্যের job ছোঁয়া যাবে না
+    const booking = await collections.bookings.findOne({
+      _id: new ObjectId(id),
+      technicianEmail: req.user.email,
+    });
+    if (!booking) {
+      return res.status(404).send({ message: "Booking not found" });
+    }
+
+    // এই status থেকে পরের কোন কোন status-এ যাওয়া যায়
+    const allowed = technicianTransitions[booking.status] || [];
+    if (!allowed.includes(status)) {
+      return res.status(400).send({
+        message: `Cannot change status from ${booking.status} to ${status}`,
+      });
+    }
+
+    const changes = { status };
+
+    // completed করতে হলে final amount দিতে হবে (০ এর বেশি সংখ্যা)
+    if (status === "completed") {
+      const amount = Number(finalAmount);
+      if (!(amount > 0)) {
+        return res
+          .status(400)
+          .send({ message: "Final amount must be a number greater than 0" });
+      }
+      changes.finalAmount = amount;
+    }
+
+    // filter-এ আগের status-ও রাখা হয়েছে: একই সময়ে দুইবার চাপলেও একবারই কাজ করবে
+    const result = await collections.bookings.updateOne(
+      { _id: booking._id, status: booking.status },
+      {
+        $set: changes,
+        $push: { statusHistory: { status, changedAt: new Date() } },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res
+        .status(409)
+        .send({ message: "Booking was updated already, please refresh" });
+    }
+
+    res.send({ message: `Booking marked as ${status}` });
+  } catch (error) {
+    console.error("PATCH booking status error:", error.message);
+    res.status(500).send({ message: "Failed to update booking status" });
+  }
+});
+
+// PATCH /api/bookings/:id/cancel  (শুধু নিজের booking, শুধু requested অবস্থায়)
+router.patch("/:id/cancel", verifyToken, verifyCustomer, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(404).send({ message: "Booking not found" });
+    }
+
+    const booking = await collections.bookings.findOne({
+      _id: new ObjectId(id),
+      customerEmail: req.user.email,
+    });
+    if (!booking) {
+      return res.status(404).send({ message: "Booking not found" });
+    }
+
+    if (booking.status !== "requested") {
+      return res.status(400).send({
+        message: "Only a requested booking can be cancelled",
+      });
+    }
+
+    const result = await collections.bookings.updateOne(
+      { _id: booking._id, status: "requested" },
+      {
+        $set: { status: "cancelled" },
+        $push: { statusHistory: { status: "cancelled", changedAt: new Date() } },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res
+        .status(409)
+        .send({ message: "Booking was updated already, please refresh" });
+    }
+
+    res.send({ message: "Booking cancelled" });
+  } catch (error) {
+    console.error("PATCH booking cancel error:", error.message);
+    res.status(500).send({ message: "Failed to cancel booking" });
   }
 });
 
