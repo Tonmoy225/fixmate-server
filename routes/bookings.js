@@ -209,4 +209,51 @@ router.patch("/:id/cancel", verifyToken, verifyCustomer, async (req, res) => {
   }
 });
 
+
+// GET /api/bookings/my  (customer: শুধু নিজের booking)
+router.get("/my", verifyToken, verifyCustomer, async (req, res) => {
+  try {
+    const bookings = await collections.bookings
+      .find({ customerEmail: req.user.email })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(bookings);
+  } catch (error) {
+    console.error("GET /api/bookings/my error:", error.message);
+    res.status(500).send({ message: "Failed to load your bookings" });
+  }
+});
+
+// GET /api/bookings/technician?status=  (technician: শুধু নিজের job)
+router.get("/technician", verifyToken, verifyTechnician, async (req, res) => {
+  try {
+    const validStatuses = [
+      "requested",
+      "accepted",
+      "rejected",
+      "in-progress",
+      "completed",
+      "cancelled",
+    ];
+
+    const query = { technicianEmail: req.user.email };
+
+    // status দিলে এবং সেটা সঠিক হলে filter হবে, "all" বা ভুল মান হলে সব আসবে
+    if (req.query.status && validStatuses.includes(req.query.status)) {
+      query.status = req.query.status;
+    }
+
+    const bookings = await collections.bookings
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(bookings);
+  } catch (error) {
+    console.error("GET /api/bookings/technician error:", error.message);
+    res.status(500).send({ message: "Failed to load requests" });
+  }
+});
+
 module.exports = router;
