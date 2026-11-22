@@ -7,6 +7,8 @@ const servicesRoutes = require("./routes/services");
 
 const adminRoutes = require("./routes/admin");
 
+const paymentsRoutes = require("./routes/payments");
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -39,6 +41,9 @@ app.use("/api/services", servicesRoutes);
 app.use("/api/bookings", bookingsRoutes);
 
 app.use("/api/admin", adminRoutes);
+
+
+app.use("/api/payments", paymentsRoutes);
 
 connectDB()
   .then(() => {
