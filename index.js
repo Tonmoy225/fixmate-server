@@ -5,6 +5,8 @@ const { connectDB } = require("./db");
 
 const servicesRoutes = require("./routes/services");
 
+const adminRoutes = require("./routes/admin");
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -35,6 +37,8 @@ app.get("/", (req, res) => {
 app.use("/api/services", servicesRoutes);
 
 app.use("/api/bookings", bookingsRoutes);
+
+app.use("/api/admin", adminRoutes);
 
 connectDB()
   .then(() => {
