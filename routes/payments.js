@@ -120,4 +120,19 @@ router.get("/verify", verifyToken, verifyCustomer, async (req, res) => {
   }
 });
 
+// GET /api/payments/my  (customer: শুধু নিজের payment)
+router.get("/my", verifyToken, verifyCustomer, async (req, res) => {
+  try {
+    const payments = await collections.payments
+      .find({ customerEmail: req.user.email })
+      .sort({ paidAt: -1 })
+      .toArray();
+
+    res.send(payments);
+  } catch (error) {
+    console.error("GET /api/payments/my error:", error.message);
+    res.status(500).send({ message: "Failed to load payments" });
+  }
+});
+
 module.exports = router;
